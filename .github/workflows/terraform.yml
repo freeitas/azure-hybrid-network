@@ -1,0 +1,129 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+  push:
+    branches: [main]
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply after planning (main only, needs approval on the lab environment)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  WORKDIR: infra/envs/lab
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_owner: ${{ vars.LAB_OWNER }}
+  TF_VAR_admin_username: ${{ vars.LAB_ADMIN_USERNAME }}
+  TF_VAR_alert_email: ${{ vars.LAB_ALERT_EMAIL }}
+  TF_VAR_budget_start_date: ${{ vars.LAB_BUDGET_START_DATE }}
+
+jobs:
+  # Pull requests stop here. They run untrusted branch code, so they get no Azure token.
+  checks:
+    name: Static checks and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.16.4"
+          terraform_wrapper: false
+      - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
+      - name: Format
+        run: terraform fmt -check -recursive infra
+      - name: Validate and test the lab environment
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+          terraform test
+      - name: Validate bootstrap
+        working-directory: infra/bootstrap
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: TFLint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --config "$GITHUB_WORKSPACE/infra/.tflint.hcl" --init
+          tflint --config "$GITHUB_WORKSPACE/infra/.tflint.hcl" --chdir infra --recursive
+      - name: Checkov
+        run: |
+          pipx install checkov
+          checkov --config-file infra/.checkov.yaml --directory infra
+
+  plan:
+    name: Plan
+    needs: checks
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: lab-plan
+    concurrency:
+      group: terraform-lab
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.16.4"
+          terraform_wrapper: false
+      - name: Init
+        working-directory: ${{ env.WORKDIR }}
+        run: >
+          terraform init -input=false
+          -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=lab.tfstate"
+          -backend-config="use_azuread_auth=true"
+      - name: Plan
+        working-directory: ${{ env.WORKDIR }}
+        run: terraform plan -input=false -lock-timeout=5m
+
+  # Approvers read the plan job's log, then approve the lab environment. The plan is
+  # recalculated here because a saved plan file would carry secrets as an artifact.
+  apply:
+    name: Apply
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && inputs.apply && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: lab
+    concurrency:
+      group: terraform-lab
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.16.4"
+          terraform_wrapper: false
+      - name: Init
+        working-directory: ${{ env.WORKDIR }}
+        run: >
+          terraform init -input=false
+          -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=lab.tfstate"
+          -backend-config="use_azuread_auth=true"
+      - name: Apply
+        working-directory: ${{ env.WORKDIR }}
+        run: terraform apply -input=false -lock-timeout=5m -auto-approve

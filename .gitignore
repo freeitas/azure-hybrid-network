@@ -1,0 +1,24 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local values and secrets; only the examples are tracked
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+backend.hcl
+
+# macOS
+.DS_Store
+
+# Third-party reference material, kept locally only
+docs/improvement-story/before/
+docs/source-material/

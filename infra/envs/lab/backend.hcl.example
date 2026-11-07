@@ -1,0 +1,6 @@
+# Copy to backend.hcl, using the values from `terraform output backend_config` in infra/bootstrap.
+resource_group_name  = "rg-tfstate-001"
+storage_account_name = "sttfstatexxxxxx"
+container_name       = "tfstate"
+key                  = "lab.tfstate"
+use_azuread_auth     = true

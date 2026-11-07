@@ -1,0 +1,19 @@
+# Copy to lab.tfvars, which git ignores. Secrets are generated and stored in Key Vault.
+owner             = "your-name"
+admin_username    = "labadmin"
+alert_email       = "you@example.com"
+budget_start_date = "2026-12-01T00:00:00Z" # First day of the current or a future month
+
+# Optional: lets your IP RDP to vm-fw-001 before the VPN exists. Remove it afterwards.
+# admin_source_cidr = "203.0.113.10/32"
+
+# Optional: turn the VPN gateway off between study sessions to save cost.
+# vpn_enabled = false
+
+# Optional: deploy an app ZIP during the IIS bootstrap. Get the hash with: shasum -a 256 file.zip
+# app_packages = {
+#   "vm-srv-aue-001" = {
+#     url    = "https://example.blob.core.windows.net/packages/app.zip"
+#     sha256 = "UPPERCASE-SHA256-OF-THE-ZIP"
+#   }
+# }

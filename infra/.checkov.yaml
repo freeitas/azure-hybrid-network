@@ -1,0 +1,33 @@
+framework:
+  - terraform
+compact: true
+quiet: true
+download-external-modules: false
+
+# Each exception is accepted for this lab. See infra/README.md for the reasoning.
+skip-check:
+  # Lab cost and original requirements: single-instance B1 plans and LRS storage
+  - CKV_AZURE_206
+  - CKV_AZURE_211
+  - CKV_AZURE_212
+  - CKV_AZURE_225
+  # Web apps are public by design, restricted to our Front Door by IP rule and header
+  - CKV_AZURE_222
+  - CKV_AZURE_13
+  - CKV_AZURE_17
+  # Gallery browsers need the Blob endpoint; hosted CI runners need the state endpoint
+  - CKV_AZURE_35
+  - CKV_AZURE_59
+  # Queue service is not used on any account
+  - CKV_AZURE_33
+  # Run Command needs the VM agent, which is what this check forbids
+  - CKV_AZURE_50
+  # Encryption at host needs a subscription feature; platform-managed encryption stays on
+  - CKV_AZURE_151
+  # Key Vault firewall would block hosted CI runners; access is Entra RBAC only
+  - CKV_AZURE_109
+  - CKV_AZURE_189
+  # Open gap: no secret rotation exists, so an expiry date would only break the lab
+  - CKV_AZURE_41
+  # Apps have no dependency on an Azure Files content share
+  - CKV_AZURE_88
